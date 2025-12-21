@@ -167,3 +167,19 @@ app.listen(PORT, () => console.log('Server running on port', PORT));
 app.get('/', (req, res) => {
   res.send('Deutschio backend is running 🚀');
 });
+
+
+
+function auth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.sendStatus(401);
+
+  try {
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded; // attach user info
+    next();
+  } catch {
+    return res.sendStatus(401);
+  }
+}
