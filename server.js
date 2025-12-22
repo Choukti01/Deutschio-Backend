@@ -6,22 +6,14 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 
 const app = express();
+
+
+
+
+app.use(cors());           //  allow ALL origins (temporary fix)
 app.use(express.json());
 
 
-app.use(cors({
-  origin: [
-    'http://localhost:5500',
-    'http://127.0.0.1:5500',
-    'https://ddeutschio.netlify.app'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// IMPORTANT: handle preflight explicitly
-app.options('*', cors());
 
 
 // app.use(cors({
@@ -174,10 +166,9 @@ res.json({
 
 
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Server running on port', PORT));
 
-// app.listen(3000, () => console.log('Server running on port 3000'));
+
+
 
 
 // Railway needed this !
@@ -200,3 +191,7 @@ function auth(req, res, next) {
     return res.sendStatus(401);
   }
 }
+
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log('Server running on port', PORT));
