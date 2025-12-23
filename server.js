@@ -11,7 +11,7 @@ app.use(cors());           // allow ALL origins (temporary fix)
 app.use(express.json());
 
 // ✅ ADDED: handle CORS preflight properly
-app.options('*', cors());
+app.options('/*', cors());
 
 
 // MongoDB connection
