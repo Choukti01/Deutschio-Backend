@@ -7,19 +7,15 @@ const cors = require('cors');
 
 const app = express();
 
-app.use(cors());           // allow ALL origins (temporary fix)
+app.use(cors());           // ✅ this is enough
 app.use(express.json());
-
-// ✅ ADDED: handle CORS preflight properly
-app.options('/*', cors());
-
 
 // MongoDB connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => {
     console.error('MongoDB connection error:', err);
-    process.exit(1); // ✅ ADDED: crash clearly if Mongo fails
+    process.exit(1);
   });
 
 // User Schema
@@ -28,17 +24,12 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   name: { type: String, default: '' },
   avatar: { type: String, default: '' },
-  notes: [
-    {
-      text: String,
-      createdAt: Date
-    }
-  ]
+  notes: [{ text: String, createdAt: Date }]
 });
 
 const User = mongoose.model('User', userSchema);
 
-// ---------------- PROFILE ROUTES ----------------
+// -------- PROFILE ROUTES --------
 
 app.put('/profile/avatar', async (req, res) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -46,9 +37,7 @@ app.put('/profile/avatar', async (req, res) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    await User.findByIdAndUpdate(decoded.id, {
-      avatar: req.body.avatar
-    });
+    await User.findByIdAndUpdate(decoded.id, { avatar: req.body.avatar });
     res.sendStatus(200);
   } catch {
     res.sendStatus(401);
@@ -61,9 +50,7 @@ app.put('/profile/notes', async (req, res) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    await User.findByIdAndUpdate(decoded.id, {
-      notes: req.body.notes
-    });
+    await User.findByIdAndUpdate(decoded.id, { notes: req.body.notes });
     res.sendStatus(200);
   } catch {
     res.sendStatus(401);
@@ -83,7 +70,7 @@ app.delete('/profile', async (req, res) => {
   }
 });
 
-// ---------------- AUTH ----------------
+// -------- AUTH --------
 
 app.post('/signup', async (req, res) => {
   const { email, password } = req.body;
@@ -95,8 +82,7 @@ app.post('/signup', async (req, res) => {
     return res.status(400).json({ message: 'User already exists' });
 
   const hashed = await bcrypt.hash(password, 10);
-  const user = new User({ email, password: hashed });
-  await user.save();
+  await new User({ email, password: hashed }).save();
 
   res.status(201).json({ message: 'User created' });
 });
@@ -147,13 +133,11 @@ app.get('/profile', async (req, res) => {
   }
 });
 
-// ---------------- HEALTH CHECK ----------------
+// -------- HEALTH --------
 
 app.get('/', (req, res) => {
   res.send('Deutschio backend is running 🚀');
 });
-
-// ---------------- START SERVER ----------------
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Server running on port', PORT));
