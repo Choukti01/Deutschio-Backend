@@ -7,149 +7,101 @@ const cors = require('cors');
 
 const app = express();
 
+/* =======================
+   CORS (EXPRESS 5 SAFE)
+======================= */
+const corsOptions = {
+  origin: 'https://ddeutschio.netlify.app',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // 🔥 THIS IS THE KEY LINE
+
 app.use(express.json());
 
-app.use(cors({
-  origin: 'https://ddeutschio.netlify.app',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false
-}));
-
-
-
-
-
-
-
-// MongoDB connection
-mongoose.connect(process.env.MONGO_URI)
+/* =======================
+   DATABASE
+======================= */
+mongoose
+  .connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => {
-    console.error('MongoDB connection error:', err.message);
+    console.error('MongoDB error:', err.message);
+    process.exit(1);
   });
 
-
-// User Schema
+/* =======================
+   MODEL
+======================= */
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  name: { type: String, default: '' },
-  avatar: { type: String, default: '' },
-  notes: [{ text: String, createdAt: Date }]
+  password: { type: String, required: true }
 });
 
 const User = mongoose.model('User', userSchema);
 
-// -------- PROFILE ROUTES --------
-
-app.put('/profile/avatar', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.sendStatus(401);
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    await User.findByIdAndUpdate(decoded.id, { avatar: req.body.avatar });
-    res.sendStatus(200);
-  } catch {
-    res.sendStatus(401);
-  }
-});
-
-app.put('/profile/notes', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.sendStatus(401);
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    await User.findByIdAndUpdate(decoded.id, { notes: req.body.notes });
-    res.sendStatus(200);
-  } catch {
-    res.sendStatus(401);
-  }
-});
-
-app.delete('/profile', async (req, res) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.sendStatus(401);
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    await User.findByIdAndDelete(decoded.id);
-    res.sendStatus(200);
-  } catch {
-    res.sendStatus(401);
-  }
-});
-
-// -------- AUTH --------
-
+/* =======================
+   AUTH
+======================= */
 app.post('/signup', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password)
-    return res.status(400).json({ message: 'All fields required' });
+  try {
+    const { email, password } = req.body;
 
-  const existing = await User.findOne({ email });
-  if (existing)
-    return res.status(400).json({ message: 'User already exists' });
+    if (!email || !password)
+      return res.status(400).json({ message: 'All fields required' });
 
-  const hashed = await bcrypt.hash(password, 10);
-  await new User({ email, password: hashed }).save();
+    const exists = await User.findOne({ email });
+    if (exists)
+      return res.status(400).json({ message: 'User already exists' });
 
-  res.status(201).json({ message: 'User created' });
+    const hashed = await bcrypt.hash(password, 10);
+    await User.create({ email, password: hashed });
+
+    res.status(201).json({ message: 'User created' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
 app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password)
-    return res.status(400).json({ message: 'All fields required' });
-
-  const user = await User.findOne({ email });
-  if (!user)
-    return res.status(400).json({ message: 'Invalid credentials' });
-
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid)
-    return res.status(400).json({ message: 'Invalid credentials' });
-
-  const token = jwt.sign(
-    { id: user._id, email: user.email },
-    process.env.JWT_SECRET,
-    { expiresIn: '2h' }
-  );
-
-  res.json({ token });
-});
-
-app.get('/profile', async (req, res) => {
-  const auth = req.headers.authorization;
-  if (!auth)
-    return res.status(401).json({ message: 'No token provided' });
-
   try {
-    const token = auth.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    const { email, password } = req.body;
 
+    const user = await User.findOne({ email });
     if (!user)
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(400).json({ message: 'Invalid credentials' });
 
-    res.json({
-      email: user.email,
-      name: user.name,
-      avatar: user.avatar,
-      notes: user.notes
-    });
-  } catch {
-    res.status(401).json({ message: 'Invalid token' });
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok)
+      return res.status(400).json({ message: 'Invalid credentials' });
+
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '2h' }
+    );
+
+    res.json({ token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
-// -------- HEALTH --------
-
+/* =======================
+   HEALTH
+======================= */
 app.get('/', (req, res) => {
   res.send('Deutschio backend is running 🚀');
 });
 
+/* =======================
+   START
+======================= */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Server running on port', PORT));
+app.listen(PORT, () =>
+  console.log(`Server running on port ${PORT}`)
+);
