@@ -7,61 +7,41 @@ const cors = require('cors');
 
 const app = express();
 
-/* =======================
-   CORS (EXPRESS 5 SAFE)
-======================= */
-const corsOptions = {
-  origin: 'https://ddeutschio.netlify.app',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // 🔥 THIS IS THE KEY LINE
+/* ===== CORS (FINAL) ===== */
+app.use(cors({
+  origin: 'https://ddeutschio.netlify.app'
+}));
 
 app.use(express.json());
 
-/* =======================
-   DATABASE
-======================= */
-mongoose
-  .connect(process.env.MONGO_URI)
+/* ===== DB ===== */
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
-  .catch(err => {
-    console.error('MongoDB error:', err.message);
-    process.exit(1);
-  });
+  .catch(console.error);
 
-/* =======================
-   MODEL
-======================= */
-const userSchema = new mongoose.Schema({
+/* ===== MODEL ===== */
+const User = mongoose.model('User', new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true }
-});
+}));
 
-const User = mongoose.model('User', userSchema);
-
-/* =======================
-   AUTH
-======================= */
+/* ===== AUTH ===== */
 app.post('/signup', async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password)
-      return res.status(400).json({ message: 'All fields required' });
+      return res.status(400).json({ message: 'Missing fields' });
 
-    const exists = await User.findOne({ email });
-    if (exists)
-      return res.status(400).json({ message: 'User already exists' });
+    if (await User.findOne({ email }))
+      return res.status(400).json({ message: 'User exists' });
 
     const hashed = await bcrypt.hash(password, 10);
     await User.create({ email, password: hashed });
 
-    res.status(201).json({ message: 'User created' });
-  } catch (err) {
-    console.error(err);
+    res.status(201).json({ message: 'OK' });
+  } catch (e) {
+    console.error(e);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -71,37 +51,20 @@ app.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user)
-      return res.status(400).json({ message: 'Invalid credentials' });
+    if (!user) return res.status(400).json({ message: 'Invalid' });
 
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok)
-      return res.status(400).json({ message: 'Invalid credentials' });
+    if (!await bcrypt.compare(password, user.password))
+      return res.status(400).json({ message: 'Invalid' });
 
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '2h' }
-    );
-
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
     res.json({ token });
-  } catch (err) {
-    console.error(err);
+  } catch {
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-/* =======================
-   HEALTH
-======================= */
-app.get('/', (req, res) => {
-  res.send('Deutschio backend is running 🚀');
-});
+/* ===== HEALTH ===== */
+app.get('/', (_, res) => res.send('OK'));
 
-/* =======================
-   START
-======================= */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`Server running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log('Running'));
