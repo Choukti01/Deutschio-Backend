@@ -8,25 +8,32 @@ const cors = require('cors');
 const app = express();
 
 /* =========================
-   CORS — FINAL & CORRECT
+   CORS — FINAL (REAL FINAL)
    ========================= */
-const corsOptions = {
-  origin: 'https://ddeutschio.netlify.app',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: false,
-  optionsSuccessStatus: 200
-};
+const allowedOrigins = [
+  'http://127.0.0.1:5500',
+  'http://localhost:5500',
+  'https://ddeutschio.netlify.app'
+];
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // 🔥 REQUIRED FOR PREFLIGHT
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow curl/postman
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS blocked'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 
 /* =========================
    DATABASE
    ========================= */
-mongoose
-  .connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => {
     console.error('Mongo error:', err.message);
@@ -54,8 +61,7 @@ app.post('/signup', async (req, res) => {
     if (!email || !password)
       return res.status(400).json({ message: 'Missing fields' });
 
-    const exists = await User.findOne({ email });
-    if (exists)
+    if (await User.findOne({ email }))
       return res.status(400).json({ message: 'User exists' });
 
     const hashed = await bcrypt.hash(password, 10);
@@ -63,7 +69,7 @@ app.post('/signup', async (req, res) => {
 
     res.status(201).json({ message: 'Signup success' });
   } catch (err) {
-    console.error('Signup error:', err);
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -88,17 +94,15 @@ app.post('/login', async (req, res) => {
 
     res.json({ token });
   } catch (err) {
-    console.error('Login error:', err);
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
 /* =========================
-   HEALTH CHECK
+   HEALTH
    ========================= */
-app.get('/', (req, res) => {
-  res.send('Deutschio backend OK');
-});
+app.get('/', (_, res) => res.send('Deutschio backend OK'));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+app.listen(PORT, () => console.log('Server running on', PORT));
