@@ -8,26 +8,9 @@ const cors = require('cors');
 const app = express();
 
 /* =========================
-   CORS — FINAL (REAL FINAL)
+   CORS — SAFE & STABLE
    ========================= */
-const allowedOrigins = [
-  'http://127.0.0.1:5500',
-  'http://localhost:5500',
-  'https://ddeutschio.netlify.app'
-];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // allow curl/postman
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    return callback(new Error('CORS blocked'));
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
+app.use(cors()); // ← NO CONFIG, NO CRASH
 app.use(express.json());
 
 /* =========================
@@ -52,7 +35,7 @@ const User = mongoose.model(
 );
 
 /* =========================
-   AUTH ROUTES
+   AUTH
    ========================= */
 app.post('/signup', async (req, res) => {
   try {
@@ -102,7 +85,9 @@ app.post('/login', async (req, res) => {
 /* =========================
    HEALTH
    ========================= */
-app.get('/', (_, res) => res.send('Deutschio backend OK'));
+app.get('/', (_, res) => {
+  res.send('Deutschio backend OK');
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Server running on', PORT));
