@@ -4,8 +4,22 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const cors = require('cors');
 
 const app = express();
+
+/* =========================
+   CORS — FINAL FIX
+   ========================= */
+app.use(cors({
+  origin: [
+    'https://ddeutschio.netlify.app',
+    'http://127.0.0.1:5500',
+    'http://localhost:5500'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 /* =========================
    MIDDLEWARE
@@ -16,10 +30,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 /* =========================
    DATABASE
    ========================= */
-mongoose.connect(process.env.MONGO_URI)
+mongoose
+  .connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => {
-    console.error(err);
+    console.error('Mongo error:', err);
     process.exit(1);
   });
 
@@ -37,9 +52,25 @@ const User = mongoose.model(
   })
 );
 
+/* =========================
+   AUTH MIDDLEWARE
+   ========================= */
+function auth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header) return res.status(401).json({ message: 'No token' });
+
+  try {
+    const token = header.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.userId = decoded.id;
+    next();
+  } catch {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+}
 
 /* =========================
-   ROUTES
+   AUTH ROUTES
    ========================= */
 app.post('/signup', async (req, res) => {
   try {
@@ -53,57 +84,47 @@ app.post('/signup', async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     await User.create({ email, password: hashed });
 
-    res.json({ message: 'Signup success' });
-  } catch {
+    res.status(201).json({ message: 'Signup success' });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
-
-// =========================
-// AUTH MIDDLEWARE
-// =========================
-function auth(req, res, next) {
-  const header = req.headers.authorization;
-  if (!header) return res.status(401).json({ message: 'No token' });
-
-  try {
-    const token = header.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = decoded.id;
-    next();
-  } catch {
-    return res.status(401).json({ message: 'Invalid token' });
-  }
-}
-
 
 app.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+    if (!user)
+      return res.status(400).json({ message: 'Invalid credentials' });
 
     const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(400).json({ message: 'Invalid credentials' });
+    if (!ok)
+      return res.status(400).json({ message: 'Invalid credentials' });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '2h' }
+    );
+
     res.json({ token });
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-
-// =========================
-// PROFILE ROUTES
-// =========================
+/* =========================
+   PROFILE ROUTES
+   ========================= */
 app.get('/profile', auth, async (req, res) => {
   const user = await User.findById(req.userId).select('-password');
   res.json(user);
 });
 
-app.put('/', auth, async (req, res) => {
+app.put('/profile', auth, async (req, res) => {
   const user = await User.findByIdAndUpdate(
     req.userId,
     req.body,
@@ -126,23 +147,17 @@ app.delete('/profile', auth, async (req, res) => {
   res.json({ message: 'Account deleted' });
 });
 
-
-
 /* =========================
-   FRONTEND ROUTES
+   FRONTEND FALLBACK
    ========================= */
-
-
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'signup.html'));
-});
-
-app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
 /* =========================
    START
    ========================= */
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Server running on', PORT));
+app.listen(PORT, () =>
+  console.log(`Server running on port ${PORT}`)
+);

@@ -11,7 +11,7 @@ signupForm.addEventListener('submit', async (e) => {
   errorDiv.textContent = '';
 
   try {
-    const res = await fetch(`${deutschio.up.railway.app}/signup`, {
+    const res = await fetch(`${API_URL}/signup`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -19,11 +19,7 @@ signupForm.addEventListener('submit', async (e) => {
       body: JSON.stringify({ email, password })
     });
 
-    const isJson = res.headers
-      .get('content-type')
-      ?.includes('application/json');
-
-    const data = isJson ? await res.json() : {};
+    const data = await res.json();
 
     if (!res.ok) {
       errorDiv.style.display = 'block';
