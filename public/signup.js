@@ -8,14 +8,11 @@ signupForm.addEventListener('submit', async (e) => {
   const password = document.getElementById('signupPassword').value;
 
   errorDiv.style.display = 'none';
-  errorDiv.textContent = '';
 
   try {
     const res = await fetch(`${API_URL}/signup`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
 
@@ -23,16 +20,14 @@ signupForm.addEventListener('submit', async (e) => {
 
     if (!res.ok) {
       errorDiv.style.display = 'block';
-      errorDiv.textContent =
-        data.message || `Signup failed (status ${res.status})`;
+      errorDiv.textContent = data.message;
       return;
     }
 
-    alert('Signup successful! You can now login.');
+    alert(data.message);
     window.location.href = 'login.html';
 
-  } catch (err) {
-    console.error('Network error:', err);
+  } catch {
     errorDiv.style.display = 'block';
     errorDiv.textContent = 'Cannot connect to server';
   }

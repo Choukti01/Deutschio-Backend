@@ -5,11 +5,13 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const cors = require('cors');
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
 
 const app = express();
 
 /* =========================
-   CORS — FINAL FIX
+   CORS
    ========================= */
 app.use(cors({
   origin: [
@@ -30,27 +32,36 @@ app.use(express.static(path.join(__dirname, 'public')));
 /* =========================
    DATABASE
    ========================= */
-mongoose
-  .connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('MongoDB connected'))
   .catch(err => {
-    console.error('Mongo error:', err);
+    console.error(err);
     process.exit(1);
   });
 
 /* =========================
-   MODEL
+   USER MODEL
    ========================= */
-const User = mongoose.model(
-  'User',
-  new mongoose.Schema({
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    name: { type: String, default: '' },
-    avatar: { type: String, default: '' },
-    notes: { type: Array, default: [] }
-  })
-);
+const User = mongoose.model('User', new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  emailVerified: { type: Boolean, default: false },
+  verificationToken: String,
+  name: { type: String, default: '' },
+  avatar: { type: String, default: '' },
+  notes: { type: Array, default: [] }
+}));
+
+/* =========================
+   MAILER
+   ========================= */
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 
 /* =========================
    AUTH MIDDLEWARE
@@ -70,7 +81,7 @@ function auth(req, res, next) {
 }
 
 /* =========================
-   AUTH ROUTES
+   SIGNUP (WITH EMAIL VERIFY)
    ========================= */
 app.post('/signup', async (req, res) => {
   try {
@@ -82,15 +93,57 @@ app.post('/signup', async (req, res) => {
       return res.status(400).json({ message: 'User exists' });
 
     const hashed = await bcrypt.hash(password, 10);
-    await User.create({ email, password: hashed });
+    const verificationToken = crypto.randomBytes(32).toString('hex');
 
-    res.status(201).json({ message: 'Signup success' });
+    await User.create({
+      email,
+      password: hashed,
+      verificationToken
+    });
+
+    const verifyLink = `${process.env.APP_URL}/verify-email?token=${verificationToken}`;
+
+    await transporter.sendMail({
+      from: `"Deutschio" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Verify your email',
+      html: `
+        <h2>Welcome to Deutschio 🇩🇪</h2>
+        <p>Click the link below to verify your email:</p>
+        <a href="${verifyLink}">${verifyLink}</a>
+      `
+    });
+
+    res.status(201).json({
+      message: 'Signup successful. Check your email to verify your account.'
+    });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
+/* =========================
+   VERIFY EMAIL
+   ========================= */
+app.get('/verify-email', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).send('Invalid link');
+
+  const user = await User.findOne({ verificationToken: token });
+  if (!user) return res.status(400).send('Invalid or expired token');
+
+  user.emailVerified = true;
+  user.verificationToken = null;
+  await user.save();
+
+  res.send('<h2>Email verified ✅ You can now login.</h2>');
+});
+
+/* =========================
+   LOGIN (BLOCK IF NOT VERIFIED)
+   ========================= */
 app.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -98,6 +151,9 @@ app.post('/login', async (req, res) => {
     const user = await User.findOne({ email });
     if (!user)
       return res.status(400).json({ message: 'Invalid credentials' });
+
+    if (!user.emailVerified)
+      return res.status(403).json({ message: 'Please verify your email first' });
 
     const ok = await bcrypt.compare(password, user.password);
     if (!ok)
@@ -110,6 +166,7 @@ app.post('/login', async (req, res) => {
     );
 
     res.json({ token });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
@@ -117,38 +174,15 @@ app.post('/login', async (req, res) => {
 });
 
 /* =========================
-   PROFILE ROUTES
+   PROFILE
    ========================= */
 app.get('/profile', auth, async (req, res) => {
   const user = await User.findById(req.userId).select('-password');
   res.json(user);
 });
 
-app.put('/profile', auth, async (req, res) => {
-  const user = await User.findByIdAndUpdate(
-    req.userId,
-    req.body,
-    { new: true }
-  ).select('-password');
-  res.json(user);
-});
-
-app.put('/name', auth, async (req, res) => {
-  const user = await User.findByIdAndUpdate(
-    req.userId,
-    { name: req.body.name },
-    { new: true }
-  ).select('-password');
-  res.json(user);
-});
-
-app.delete('/profile', auth, async (req, res) => {
-  await User.findByIdAndDelete(req.userId);
-  res.json({ message: 'Account deleted' });
-});
-
 /* =========================
-   FRONTEND FALLBACK
+   FRONTEND
    ========================= */
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'signup.html'));
