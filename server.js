@@ -6,9 +6,14 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const cors = require('cors');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
 const app = express();
+
+/* =========================
+   RESEND
+   ========================= */
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 /* =========================
    CORS
@@ -53,17 +58,6 @@ const User = mongoose.model('User', new mongoose.Schema({
 }));
 
 /* =========================
-   MAILER
-   ========================= */
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
-
-/* =========================
    AUTH MIDDLEWARE
    ========================= */
 function auth(req, res, next) {
@@ -81,11 +75,12 @@ function auth(req, res, next) {
 }
 
 /* =========================
-   SIGNUP (WITH EMAIL VERIFY)
+   SIGNUP (EMAIL VERIFY)
    ========================= */
 app.post('/signup', async (req, res) => {
   try {
     const { email, password } = req.body;
+
     if (!email || !password)
       return res.status(400).json({ message: 'Missing fields' });
 
@@ -101,15 +96,16 @@ app.post('/signup', async (req, res) => {
       verificationToken
     });
 
-    const verifyLink = `${process.env.APP_URL}/verify-email?token=${verificationToken}`;
+    const verifyLink =
+      `${process.env.APP_URL}/verify-email?token=${verificationToken}`;
 
-    await transporter.sendMail({
-      from: `"Deutschio" <${process.env.EMAIL_USER}>`,
+    await resend.emails.send({
+      from: 'Deutschio <onboarding@resend.dev>',
       to: email,
       subject: 'Verify your email',
       html: `
         <h2>Welcome to Deutschio 🇩🇪</h2>
-        <p>Click the link below to verify your email:</p>
+        <p>Please verify your email by clicking the link below:</p>
         <a href="${verifyLink}">${verifyLink}</a>
       `
     });
@@ -142,7 +138,7 @@ app.get('/verify-email', async (req, res) => {
 });
 
 /* =========================
-   LOGIN (BLOCK IF NOT VERIFIED)
+   LOGIN
    ========================= */
 app.post('/login', async (req, res) => {
   try {
